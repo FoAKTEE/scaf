@@ -1,0 +1,116 @@
+#<comment>
+#l=1
+
+<job>
+basename = gamma1.67_circ01b       # problem ID: basename of output filenames
+
+<time>
+evolution  = dynamic     # dynamic/kinematic/static
+cfl_number = 0.3        # The Courant, Friedrichs, & Lewy (CFL) Number
+nlim       = 100         # cycle limit
+tlim       = 100.0
+#integrator  = vl2       # time integration algorithm
+#xorder      = 2         # order of spatial reconstruction
+#ncycle_out  = 100       # interval for stdout summary info
+
+<mesh>
+nghost = 4
+nx1        = 64
+x1min      = -2         # minimum value of X1
+x1max      = 2          # maximum value of X1
+ix1_bc     = outflow    # inner-X1 boundary flag
+ox1_bc     = outflow    # outer-X1 boundary flag
+
+nx2        = 64
+x2min      = -2         # minimum value of X2
+x2max      = 2          # maximum value of X2
+ix2_bc     = outflow    # inner-X2 boundary flag
+ox2_bc     = outflow    # outer-X2 boundary flag
+
+nx3        = 64
+x3min      = -2         # minimum value of X3
+x3max      = 2          # maximum value of X3
+ix3_bc     = outflow    # inner-X3 boundary flag
+ox3_bc     = outflow    # outer-X3 boundary flag
+
+<mesh_refinement>
+#refinement = none
+refinement     = adaptive
+num_levels       = 4 # 11
+max_nmb_per_rank = 1024
+derefine_count    = 5
+refine_interval = 1
+
+#refinement = static
+
+
+#<refinement1>
+#level = 8
+#x1min = -0.125
+#x1max = 0.125
+#x2min = -0.125
+#x2max = 0.125
+#x3min = -0.125
+#x3max = 0.125
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 16
+
+#nx1 = 16 # 8
+#nx2 = 16
+#nx3 = 16
+
+<hydro>
+#epsilon		= 0.0001
+eos             = ideal   # EOS type
+reconstruct     = wenoz     # spatial reconstruction method
+rsolver         = hllc    # Riemann-solver to be used
+gamma           = 1.6666667 # gamma = C_p/C_v
+
+#<turbulence>
+#dedt       = 0.0  # Energy injection rate (for driven) or Total energy (for decaying)
+#nlow       = 0    # cut-off wavenumber at low-k
+#nhigh      = 16   # cut-off wavenumber at high-k
+#expo       = 2.0  # power-law exponent
+#tcorr      = 0.1  # correlation time for OU process (both impulsive and continuous)
+#dtdrive    = 0.1  # time interval between perturbation (impulsive)
+#f_shear    = 0.5  # the ratio of the shear component
+#rseed      = -1   # if non-negative, seed will be set by hand (slow PS generation)
+
+#<turb_driving>
+#type = hydro
+#tcorr = 0.5           # ~ L / 2 pi urms 
+#dedt  = 0.1           # ~ urms^3 / 2 L
+#nlow = 1
+#nhigh = 2
+
+<problem>
+#set_B0 = 1
+output_Mdot = 1
+acc_mode = 1
+turb_flag  = 0
+fcirc	= 0.1
+# 1 for decaying, 2 (impulsive) or 3 (continuous) for driven turbulence
+
+user_hist   = true       # user history output
+
+<output1>
+file_type  = hst        # History output
+dt         = 0.01       # time increment between outputs
+data_format = %13.6e     # Optional data format string
+
+
+<output2>
+file_type  = bin       # Binary data dump
+variable   = hydro_w       # variables to be output
+dt         = 0.1
+
+<output3>
+file_type  = rst        # Restart dump
+dt         = 10.0
+
+#<output4>
+#file_type  = hst        # History output
+#dt         = 0.01       # time increment between outputs
