@@ -18,6 +18,7 @@
 #include "adm/adm.hpp"
 #include "z4c/z4c.hpp"
 #include "ion-neutral/ion_neutral.hpp"
+#include "im-eos/im_eos.hpp"
 #include "diffusion/viscosity.hpp"
 #include "diffusion/resistivity.hpp"
 #include "radiation/radiation.hpp"
@@ -93,7 +94,7 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   if (pin->DoesBlockExist("hydro")) {
     phydro = new hydro::Hydro(this, pin);
     nphysics++;
-    if (!(pin->DoesBlockExist("mhd")) && !(pin->DoesBlockExist("radiation"))) {
+    if (!(pin->DoesBlockExist("mhd")) && !(pin->DoesBlockExist("radiation"))  && !(pin->DoesBlockExist("im-eos"))) {
       phydro->AssembleHydroTasks(start_tl, run_tl, end_tl);
     }
   } else {
@@ -105,7 +106,7 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   if (pin->DoesBlockExist("mhd")) {
     pmhd = new mhd::MHD(this, pin);
     nphysics++;
-    if (!(pin->DoesBlockExist("hydro")) && !(pin->DoesBlockExist("radiation"))) {
+    if (!(pin->DoesBlockExist("hydro")) && !(pin->DoesBlockExist("radiation"))  && !(pin->DoesBlockExist("im-eos"))) {
       pmhd->AssembleMHDTasks(start_tl, run_tl, end_tl);
     }
   } else {
@@ -135,6 +136,26 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
       std::exit(EXIT_FAILURE);
     }
     pionn = nullptr;
+  }
+
+  // (4') IMPLICIT EOS AND SINK
+  // Create implicit EOS and sink physics module.
+  bool imeos_flag = pin->DoesBlockExist("im-eos");
+
+
+  if (pin->DoesBlockExist("im-eos")) {
+    pimeos = new im_eos::ImEos(this, pin);   // construct new MHD object
+    if (pin->DoesBlockExist("hydro") || pin->DoesBlockExist("mhd")) {
+      pimeos->AssembleImEosTasks(start_tl, run_tl, end_tl);
+      nphysics++;
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<im_eos> block detected in input file, but either"
+                << " <hydro> or <mhd> block missing" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  } else {
+    pimeos = nullptr;
   }
 
   // (5) RADIATION

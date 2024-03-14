@@ -408,6 +408,11 @@ Real t_cool = 1.0;
 
         // now accrete... acc_mode=0 means no accretor.
         // accrete within r_smooth
+
+// @hyw
+// 2024.3: migrate sink to IMEX-scheme in im-eos
+
+/*
         if (r<r_smooth) {
           Real dt_dyn = dt * std::pow(r_smooth, -1.5);
           if (scaf_.acc_mode==1) { // remove mass, keep velocity and specific momentum
@@ -453,9 +458,13 @@ Real t_cool = 1.0;
             }
           }
         }
+*/
 
+// @hyw
+// todo: check whether moving cooling to IMEX or not
 
         if (r>1.) {
+      
           // step 2. cooling: cool towards T=p/rho=T0
           // if (NON_BAROTROPIC_EOS) {
             if (scaf_.only_damp_v) { // only damp velocity
@@ -481,6 +490,8 @@ Real t_cool = 1.0;
             }
           // } // (NON_BAROTROPIC_EOS)
 
+// @hyw
+// from my limited experience, fraction reduction is fine to do explicitly, so does the damping
 
           // step 3. mass removal towards rho = 1.
             Real bracket = std::max(1 + (scaf_.gamma-1)/r - (scaf_.gamma - 1)/2.0*scaf_.fcirc/(pow(x, 2) + pow(y, 2)),scaf_.dfloor);

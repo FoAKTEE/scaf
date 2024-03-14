@@ -19,6 +19,7 @@
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "ion-neutral/ion_neutral.hpp"
+#include "im-eos/im_eos.hpp"
 #include "radiation/radiation.hpp"
 #include "z4c/z4c.hpp"
 #include "driver.hpp"
@@ -63,7 +64,8 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
   lb_efficiency_(0),
   pwall_clock_(ptimer),
   wall_time(wtlim),
-  impl_src("ru",1,1,1,1,1,1) {
+  impl_src("ru",1,1,1,1,1,1), 
+  impl_src_imeos("rueos",1,1,1,1,1,1) {
   // set time-evolution option (no default)
   {
     std::string evolution_t = pin->GetString("time","evolution");
@@ -295,6 +297,26 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
     int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
     int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
     Kokkos::realloc(impl_src, nimp_stages, nmb, 8, ncells3, ncells2, ncells1);
+  }
+
+
+  // @hyw
+  // allocate memory for stiff source terms with ImEx integrators (new ImEos class)
+  // only implemented for implicit equation of state and sink term
+  im_eos::ImEos *pimeos = pmesh->pmb_pack->pimeos;
+  if (pimeos != nullptr) {
+    if (nimp_stages == 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "(M)HD (with ImEos) can only be run with ImEx integrators."
+          << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    int nmb = std::max((pmesh->pmb_pack->nmb_thispack), (pmesh->nmb_maxperrank));
+    auto &indcs = pmesh->mb_indcs;
+    int ncells1 = indcs.nx1 + 2*(indcs.ng);
+    int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
+    int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
+    Kokkos::realloc(impl_src_imeos, nimp_stages, nmb, 8, ncells3, ncells2, ncells1);
   }
 
   return;

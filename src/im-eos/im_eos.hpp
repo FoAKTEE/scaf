@@ -5,8 +5,8 @@
 // Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
-//! \file ion-neutral.hpp
-//  \brief definitions for IonNeutral class
+//! \file im-eos.hpp
+//  \brief definitions for ImEos class
 
 #include "athena.hpp"
 #include "parameter_input.hpp"
@@ -14,8 +14,8 @@
 #include "driver/driver.hpp"
 
 //----------------------------------------------------------------------------------------
-//! \struct IonNeutralTaskIDs
-//  \brief container to hold TaskIDs of all ion-neutral tasks
+//! \struct ImEosTaskIDs
+//  \brief container to hold TaskIDs of all im-eos tasks
 
 struct ImEosTaskIDs {
   TaskID i_irecv;
@@ -63,12 +63,28 @@ class ImEos {
   ImEos(MeshBlockPack *ppack, ParameterInput *pin);
   ~ImEos();
 
-  // F = - gamma rho_i rho_n (u_i - u_n) + xi rho_n u_n - alpha rho_i^2 u_i
-  // G = xi rho_n - alpha rho_i^2
   // @hyw: add sink and cooling related params (for the implicit solvers)
   struct imexparam {
 
+    int acc_mode; // flag for accretor setup. 0=no accretor.
+    Real acc_rate; // accretion efficiency for smooth accretor
+    Real T0; // T at r>1
+    Real B0; // ((gamma-1)/gamma * P + Ek) / Phi
+    bool set_B0; // whether set T0 or B0
+    bool only_damp_v; // damp velocity only
+    bool output_Mdot;
+    Real fcirc;
+    Real sink_radius_n_cell; // number of cells for sink radius
+    int n_cell_acc1; // cells at r<r_sink
+    int n_cell_acc2; // cells at r_sink - 1.5 r_sink
+    int turb_flag; // flag for turbulence
+
+    Real gamma, gm1; // ideal gas EOS data
+    Real dfloor, pfloor; // Apply a density floor - useful for large |z| regions
+
   } params;
+
+  Real n_cells_between_radii(Real n_in, Real n_out);
 
   // container to hold names of TaskIDs
   ImEosTaskIDs id;

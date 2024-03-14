@@ -57,6 +57,8 @@ add_executable(
 
         ion-neutral/ion_neutral.cpp
 
+        im-eos/im_eos.cpp
+
         mesh/build_tree.cpp
         mesh/load_balance.cpp
         mesh/mesh.cpp

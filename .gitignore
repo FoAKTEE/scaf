@@ -1,5 +1,6 @@
 # build directories
 build/
+scaf/
 
 # Athena output files
 *.tab
@@ -15,3 +16,6 @@ build/
 # editor temp files
 *~
 *.swp
+*.o
+*.d
+Makefile

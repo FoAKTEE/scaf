@@ -22,6 +22,7 @@ namespace mhd {class MHD;}
 namespace z4c {class Z4c;}
 namespace adm {class ADM;}
 namespace ion_neutral {class IonNeutral;}
+namespace im_eos {class ImEos;}
 namespace radiation {class Radiation;}
 class TurbulenceDriver;
 namespace units {class Units;}
@@ -57,6 +58,7 @@ class MeshBlockPack {
   adm::ADM *padm=nullptr;
   z4c::Z4c *pz4c=nullptr;
   ion_neutral::IonNeutral *pionn=nullptr;
+  im_eos::ImEos *pimeos=nullptr;
   radiation::Radiation *prad=nullptr;
   TurbulenceDriver *pturb=nullptr;
   units::Units *punit=nullptr;
