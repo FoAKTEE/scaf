@@ -222,18 +222,31 @@ TaskStatus ImEos::ImpRKUpdateImEos(Driver *pdriver, int estage) {
     Real dt = pmy_pack->pmesh->dt;
     auto ru_ = pdriver->impl_src_imeos;
 
+    auto params_temp = params;
+
     par_for_outer("imex_exp",DevExeSpace(),scr_size,scr_level,0,nmb1,0,(n3-1),0,(n2-1),
     KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k, const int j) {
       for (int s=0; s<=(istage-2); ++s) {
         Real adt = a_twid[istage-2][s]*dt;
         par_for_inner(member, 0, (n1-1), [&](const int i) {
 
-
-          u(m,IDN,k,j,i) += adt*ru_(s,m,0,k,j,i);
-          u(m,IM1,k,j,i) += adt*ru_(s,m,1,k,j,i);
-          u(m,IM2,k,j,i) += adt*ru_(s,m,2,k,j,i);
-          u(m,IM3,k,j,i) += adt*ru_(s,m,3,k,j,i);
-          u(m,IEN,k,j,i) += adt*ru_(s,m,4,k,j,i);
+          auto params_ = params_temp;     
+                 
+          if (params.acc_mode==2) {
+            u(m,IDN,k,j,i) = 1.0;
+            u(m,IM1,k,j,i) = 0.;
+            u(m,IM2,k,j,i) = 0.;
+            u(m,IM3,k,j,i) = 0.;
+            u(m,IEN,k,j,i) = 1.0/params_.gm1;
+          } 
+          else {
+            u(m,IDN,k,j,i) += adt*ru_(s,m,0,k,j,i);
+            u(m,IM1,k,j,i) += adt*ru_(s,m,1,k,j,i);
+            u(m,IM2,k,j,i) += adt*ru_(s,m,2,k,j,i);
+            u(m,IM3,k,j,i) += adt*ru_(s,m,3,k,j,i);
+            u(m,IEN,k,j,i) += adt*ru_(s,m,4,k,j,i);
+          }
+          
 
 
         });
@@ -441,11 +454,17 @@ ru_(s,m,4,k,j,i) = -u(m,IEN,k,j,i)*sinkcoeff;
   
 else if (params_.acc_mode==2) { // enforce floor density + zero velocity
     
-u(m,IDN,k,j,i) = 1.0;
-u(m,IM1,k,j,i) = 0.;
-u(m,IM2,k,j,i) = 0.;
-u(m,IM3,k,j,i) = 0.;
-u(m,IEN,k,j,i) = 1.0/params_.gm1;
+ru_(s,m,0,k,j,i) = -u(m,IDN,k,j,i)*sinkcoeff;
+ru_(s,m,1,k,j,i) = -u(m,IM1,k,j,i)*sinkcoeff;
+ru_(s,m,2,k,j,i) = -u(m,IM2,k,j,i)*sinkcoeff;
+ru_(s,m,3,k,j,i) = -u(m,IM3,k,j,i)*sinkcoeff;
+ru_(s,m,4,k,j,i) = -u(m,IEN,k,j,i)*sinkcoeff;
+  
+// u(m,IDN,k,j,i) = 1.0;
+// u(m,IM1,k,j,i) = 0.;
+// u(m,IM2,k,j,i) = 0.;
+// u(m,IM3,k,j,i) = 0.;
+// u(m,IEN,k,j,i) = 1.0/params_.gm1;
   
 }
   
@@ -455,9 +474,11 @@ else if (params_.acc_mode==-1) { // inject mommentum (but no energy): do this on
 
 sinkcoeff = params_.acc_rate*dt_dyn;
 
-u(m,IM1,k,j,i) += u(m,IDN,k,j,i)*dt_a*x/r;
-u(m,IM2,k,j,i) += u(m,IDN,k,j,i)*dt_a*y/r;
-u(m,IM3,k,j,i) += u(m,IDN,k,j,i)*dt_a*z/r;
+ru_(s,m,0,k,j,i) = 0;
+ru_(s,m,1,k,j,i) = u(m,IDN,k,j,i)*dt_a*x/r;
+ru_(s,m,2,k,j,i) = u(m,IDN,k,j,i)*dt_a*y/r;
+ru_(s,m,3,k,j,i) = u(m,IDN,k,j,i)*dt_a*z/r;
+ru_(s,m,4,k,j,i) = 0;
   
 }
   
@@ -466,9 +487,13 @@ else if (params_.acc_mode==-2) { // inject mommentum (but no energy): do this on
 bool is_inflow = (vx*x+vy*y+vz*z)<0.;
 
 if (is_inflow) {
-  u(m,IM1,k,j,i) += u(m,IDN,k,j,i)*dt_a*x/r;
-  u(m,IM2,k,j,i) += u(m,IDN,k,j,i)*dt_a*y/r;
-  u(m,IM3,k,j,i) += u(m,IDN,k,j,i)*dt_a*z/r;
+
+ru_(s,m,0,k,j,i) = 0;
+ru_(s,m,1,k,j,i) = u(m,IDN,k,j,i)*dt_a*x/r;
+ru_(s,m,2,k,j,i) = u(m,IDN,k,j,i)*dt_a*y/r;
+ru_(s,m,3,k,j,i) = u(m,IDN,k,j,i)*dt_a*z/r;
+ru_(s,m,4,k,j,i) = 0;
+
 }
 
 }
@@ -478,9 +503,13 @@ else if (params_.acc_mode==-3) { // inject mommentum (but no energy): do this on
 bool is_outflow = (vx*x+vy*y+vz*z)>0.;
 
 if (is_outflow) {
-  u(m,IM1,k,j,i) += u(m,IDN,k,j,i)*dt_a*x/r;
-  u(m,IM2,k,j,i) += u(m,IDN,k,j,i)*dt_a*y/r;
-  u(m,IM3,k,j,i) += u(m,IDN,k,j,i)*dt_a*z/r;
+
+ru_(s,m,0,k,j,i) = 0;
+ru_(s,m,1,k,j,i) = u(m,IDN,k,j,i)*dt_a*x/r;
+ru_(s,m,2,k,j,i) = u(m,IDN,k,j,i)*dt_a*y/r;
+ru_(s,m,3,k,j,i) = u(m,IDN,k,j,i)*dt_a*z/r;
+ru_(s,m,4,k,j,i) = 0;
+
 }
 
 }
