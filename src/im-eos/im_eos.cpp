@@ -69,7 +69,7 @@ ImEos::ImEos(MeshBlockPack *pp, ParameterInput *pin) :
   
 }
 
-Real n_cells_between_radii(Real n_in, Real n_out){
+Real ImEos::n_cells_between_radii(Real n_in, Real n_out){
   // count how many cells are within a given radius range
   int n_max = n_out+1;
   int n_cell = 0;
@@ -231,7 +231,7 @@ TaskStatus ImEos::ImpRKUpdateImEos(Driver *pdriver, int estage) {
         par_for_inner(member, 0, (n1-1), [&](const int i) {
 
           auto params_ = params_temp;     
-                 
+
           if (params.acc_mode==2) {
             u(m,IDN,k,j,i) = 1.0;
             u(m,IM1,k,j,i) = 0.;

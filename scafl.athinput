@@ -7,8 +7,8 @@ basename = gamma1.67_circ01b       # problem ID: basename of output filenames
 <time>
 evolution  = dynamic     # dynamic/kinematic/static
 cfl_number = 0.3        # The Courant, Friedrichs, & Lewy (CFL) Number
-nlim       = -1         # cycle limit
-tlim       = 2000.0
+nlim       = -1 #19782 #100         # cycle limit
+tlim       = 100.0
 #integrator  = vl2       # time integration algorithm
 #xorder      = 2         # order of spatial reconstruction
 #ncycle_out  = 100       # interval for stdout summary info
@@ -35,27 +35,28 @@ ox3_bc     = outflow    # outer-X3 boundary flag
 
 <mesh_refinement>
 #refinement = none
-#refinement     = adaptive
-#numlevel       = 8 # 11
-#max_nmb_per_rank = 8
-#derefine_count    = 5
+refinement     = adaptive
+num_levels       = 8 # 11
+max_nmb_per_rank = 1024
+derefine_count    = 5
+refine_interval = 1
 
-refinement = static
+#refinement = static
 
 
-<refinement1>
-level = 3
-x1min = -0.125
-x1max = 0.125
-x2min = -0.125
-x2max = 0.125
-x3min = -0.125
-x3max = 0.125
+#<refinement1>
+#level = 8
+#x1min = -0.125
+#x1max = 0.125
+#x2min = -0.125
+#x2max = 0.125
+#x3min = -0.125
+#x3max = 0.125
 
 <meshblock>
-nx1 = 16
-nx2 = 16
-nx3 = 16
+nx1 = 32
+nx2 = 32
+nx3 = 32
 
 #nx1 = 16 # 8
 #nx2 = 16
@@ -91,7 +92,6 @@ output_Mdot = 1
 acc_mode = 1
 turb_flag  = 0
 fcirc	= 0.1
-hist_nr = 150
 # 1 for decaying, 2 (impulsive) or 3 (continuous) for driven turbulence
 
 user_hist   = true       # user history output
@@ -100,7 +100,7 @@ user_hist   = true       # user history output
 file_type  = hst        # History output
 dt         = 0.01       # time increment between outputs
 data_format = %13.6e     # Optional data format string
-#user_hist_only = true   # only output user-defined history
+
 
 <output2>
 file_type  = bin       # Binary data dump

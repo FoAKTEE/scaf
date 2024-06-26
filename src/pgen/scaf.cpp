@@ -65,6 +65,7 @@ int turb_flag; // flag for turbulence
 Real gamma, gm1; // ideal gas EOS data
 Real dfloor, pfloor; // Apply a density floor - useful for large |z| regions
 
+int hist_nr;
 };
 
 scaf_pgen scaf;
@@ -157,7 +158,7 @@ user_hist_func = HstOutput;
   scaf.sink_radius_n_cell = pin->GetOrAddReal("problem","sink_radius_n_cell",scaf.sink_radius_n_cell);
   scaf.n_cell_acc1 = n_cells_between_radii(0, scaf.sink_radius_n_cell);
   scaf.n_cell_acc2 = n_cells_between_radii(scaf.sink_radius_n_cell, 1.5*scaf.sink_radius_n_cell);
-
+  scaf.hist_nr = pin->GetOrAddInteger("problem", "hist_nr", 150 );
 //! void MeshBlock::ProblemGenerator in Athena++
 
   scaf.dfloor=pin->GetOrAddReal("hydro","dfloor",0.01);
@@ -171,6 +172,18 @@ user_hist_func = HstOutput;
   }
   scaf.gm1 = scaf.gamma - 1.0;
 
+  Real rmax = pin->GetReal("mesh", "x1max");
+  // @hyw: FIXME: rmin is arbitrary
+  Real rmin = scaf.sink_radius_n_cell*(rmax/64/8);
+  // Spherical Grid for user-defined history
+  auto &grids = spherical_grids;
+  
+  for (int i = 0; i < scaf.hist_nr; i++) {
+    
+    Real r_i = std::pow(rmax / rmin, static_cast<Real>(i) /
+  			   static_cast<Real>(scaf.hist_nr - 1)) * rmin;
+    grids.push_back(std::make_unique<SphericalGrid>(pmbp, 5, r_i));
+  }
     // return if restart
   if (restart) return;
 
@@ -605,14 +618,41 @@ void RefinementCondition(MeshBlockPack* pmbp) {
 }
 
 // hst outputs
-void HstOutput(HistoryData *pdata, Mesh *pm) {
+void  HstOutput(HistoryData *pdata, Mesh *pm) {
   MeshBlockPack *pmbp = pm->pmb_pack;
-  auto &eos_data = pm->pmb_pack->phydro->peos->eos_data;
   int &nhydro_ = pm->pmb_pack->phydro->nhydro;
-  
-  int nhistvar = 13;
-  pdata->nhist = 13;
+  int nvars;
+  bool is_ideal = false;
+  Real gamma;
+  bool is_mhd = false;
+  DvceArray5D<Real> w0_, u0_, bcc0_;
+  const EOS_Data &eos_data = (pmbp->pmhd != nullptr)
+                                 ? pmbp->pmhd->peos->eos_data
+                                 : pmbp->phydro->peos->eos_data;
 
+  if (pmbp->phydro != nullptr) {
+  nvars = pmbp->phydro->nhydro + pmbp->phydro->nscalars;
+  is_ideal = pmbp->phydro->peos->eos_data.is_ideal;
+  gamma = pmbp->phydro->peos->eos_data.gamma;
+  w0_ = pmbp->phydro->w0;
+  u0_ = pmbp->phydro->u0;
+} else if (pmbp->pmhd != nullptr) {
+  is_mhd = true;
+  nvars = pmbp->pmhd->nmhd + pmbp->pmhd->nscalars;
+  is_ideal = pmbp->pmhd->peos->eos_data.is_ideal;
+  gamma = pmbp->pmhd->peos->eos_data.gamma;
+  w0_ = pmbp->pmhd->w0;
+  u0_ = pmbp->pmhd->u0;
+  bcc0_ = pmbp->pmhd->bcc0;
+}
+
+
+  auto scaf_temp = scaf;
+  
+  int nhistvar = 13*scaf_temp.hist_nr+13;
+  pdata->nhist = nhistvar;
+
+  // (1) user history
   if (pdata->nhist > NHISTORY_VARIABLES) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "User history function specified pdata->nhist larger than"
@@ -631,14 +671,39 @@ void HstOutput(HistoryData *pdata, Mesh *pm) {
   pdata->label[9] = "lz___";
   pdata->label[10] = "ly___";
   pdata->label[11] = "lx___";
+
+  // (2) geodesic history
+  // extract grids, number of radii, number of fluxes, and history appending index
+  auto &grids = pm->pgen->spherical_grids;
+  int nradii = grids.size();
+  int nflux = 13;
+
+  for (int g=0; g<scaf_temp.hist_nr; ++g) {
+    std::stringstream stream;
+    stream << std::fixed << std::setprecision(1) << grids[g]->radius;
+    std::string rad_str = stream.str();
+    pdata->label[nflux*(g+1)+0] = "mdot_"+ rad_str;
+    pdata->label[nflux*(g+1)+1] = "rho__"+ rad_str;
+    pdata->label[nflux*(g+1)+2] = "Lz___"+ rad_str;
+    pdata->label[nflux*(g+1)+3] = "Ly___"+ rad_str;
+    pdata->label[nflux*(g+1)+4] = "Lx___"+ rad_str;
+    pdata->label[nflux*(g+1)+5] = "Ltot_"+ rad_str;
+    pdata->label[nflux*(g+1)+6] = "Lz2__"+ rad_str;
+    pdata->label[nflux*(g+1)+7] = "Ly2__"+ rad_str;
+    pdata->label[nflux*(g+1)+8] = "Lx2__"+ rad_str;
+    pdata->label[nflux*(g+1)+9] = "lz___"+ rad_str;
+    pdata->label[nflux*(g+1)+10] = "ly___"+ rad_str;
+    pdata->label[nflux*(g+1)+11] = "lx___"+ rad_str;
+  }
   
 
+  // initialize history data
   for (int n=0; n<nhistvar; ++n) {
     pdata->hdata[n] = 0.0;
   }
 
   // capture class variabels for kernel
-  auto &u0_ = pm->pmb_pack->phydro->u0;
+  // auto &u0_ = pm->pmb_pack->phydro->u0;
   auto &size = pm->pmb_pack->pmb->mb_size;
   int &nhist_ = pdata->nhist;
 
@@ -659,13 +724,117 @@ void HstOutput(HistoryData *pdata, Mesh *pm) {
   //  (2) mean density
   //  (3) total Lz
 
-  auto scaf_temp = scaf;
+  
   Real A = 0.;
 
   // for (int n=0; n<NREDUCTION_VARIABLES; ++n) {
   //   sum_this_mb.the_array[n] = 0.0;
   // }
 
+  // (2) geodesic history
+
+  // go through angles at each radii:
+  DualArray2D<Real> interpolated_bcc; // needed for MHD
+  for (int g = 0; g < scaf_temp.hist_nr; ++g)    // loop over radii; in the following only
+                                   // treat with one radius and various angles
+  {
+    // zero fluxes at this radius
+    for (int i = 0; i < nflux; ++i) {
+      pdata->hdata[nflux * (g+1) + i] = 0.0;
+    }
+    // interpolate primitives (and cell-centered magnetic fields iff mhd)
+    if (is_mhd) {
+      grids[g]->InterpolateToSphere(3, bcc0_);
+      Kokkos::realloc(interpolated_bcc, grids[g]->nangles, 3);
+      Kokkos::deep_copy(interpolated_bcc, grids[g]->interp_vals);
+      interpolated_bcc.template modify<DevExeSpace>();
+      interpolated_bcc.template sync<HostMemSpace>();
+    }
+    grids[g]->InterpolateToSphere(nvars, w0_);
+
+    // compute fluxes
+
+    /////////////////////////////////////////////
+
+    for (int n = 0; n < grids[g]->nangles; ++n) {
+      // extract coordinate data at this angle
+      Real r = grids[g]->radius;
+      Real x1 = grids[g]->interp_coord.h_view(n, 0);
+      Real x2 = grids[g]->interp_coord.h_view(n, 1);
+      Real x3 = grids[g]->interp_coord.h_view(n, 2);
+      // extract interpolated primitives
+      Real &int_dn = grids[g]->interp_vals.h_view(n, IDN);
+      Real &int_vx = grids[g]->interp_vals.h_view(n, IVX);
+      Real &int_vy = grids[g]->interp_vals.h_view(n, IVY);
+      Real &int_vz = grids[g]->interp_vals.h_view(n, IVZ);
+      Real int_ie = is_ideal ? grids[g]->interp_vals.h_view(n, IEN) : 0.0;
+      // extract interpolated field components (iff is_mhd)
+      Real int_bx = 0.0, int_by = 0.0, int_bz = 0.0;
+      if (is_mhd) {
+        int_bx = interpolated_bcc.h_view(n, IBX);
+        int_by = interpolated_bcc.h_view(n, IBY);
+        int_bz = interpolated_bcc.h_view(n, IBZ);
+      }
+
+      Real v1 = int_vx, v2 = int_vy, v3 = int_vz;
+      Real e_k = 0.5 * int_dn * (v1 * v1 + v2 * v2 + v3 * v3);
+      Real b1 = int_bx, b2 = int_by, b3 = int_bz;
+      Real b_sq = b1 * b1 + b2 * b2 + b3 * b3;
+      Real rad_ = sqrt(x1 * x1 + x2 * x2);
+      Real r_sq = SQR(r);
+      Real drdx = x1 / r;
+      Real drdy = x2 / r;
+      Real drdz = x3 / r;
+
+      // v_r
+      Real vr = drdx * v1 + drdy * v2 + drdz * v3;
+      // v_theta
+      Real v_theta = -drdz * (v1 * x1 / rad_ + v2 * x2 / rad_) + v3 * rad_ / r;
+      // v_phi
+      Real v_phi = -v1 * x2 / rad_ + v2 * x1 / rad_;
+
+      // l
+      Real l = x1 * v2 - x2 * v1;
+
+      // integration params
+      Real &domega = grids[g]->solid_angles.h_view(n);
+      Real is_out = (vr > 0.0) ? 1.0 : 0.0;
+      Real is_in = (vr < 0.0) ? 1.0 : 0.0;
+
+      // compute mass density
+      pdata->hdata[nflux * (g+1) + 0] += int_dn * r_sq * domega;
+
+      // compute mass flux
+      pdata->hdata[nflux * (g+1) + 1] += 1.0 * int_dn * vr * r_sq * domega;
+      pdata->hdata[nflux * (g+1) + 2] += is_out * int_dn * vr * r_sq * domega;
+      pdata->hdata[nflux * (g+1) + 3] += is_in * int_dn * vr * r_sq * domega;
+
+      // compute energy flux
+      Real t1_0 = (int_ie + e_k + 0.5 * b_sq) * vr;
+      pdata->hdata[nflux * (g+1) + 4] += 1.0 * t1_0 * r_sq * domega;
+      pdata->hdata[nflux * (g+1) + 5] += is_out * t1_0 * r_sq * domega;
+
+      // compute angular momentum flux
+      pdata->hdata[nflux * (g+1) + 6] +=
+          int_dn * (x2 * v3 - x3 * v2) * r_sq * domega;
+      pdata->hdata[nflux * (g+1) + 7] +=
+          int_dn * (x3 * v1 - x1 * v3) * r_sq * domega;
+      pdata->hdata[nflux * (g+1) + 8] +=
+          int_dn * (x1 * v2 - x2 * v1) * r_sq * domega;
+
+      pdata->hdata[nflux * (g+1) + 9] += int_dn * l * r_sq * domega;
+      pdata->hdata[nflux * (g+1) + 10] += int_dn * v_theta * r_sq * domega;
+      pdata->hdata[nflux * (g+1) + 11] += int_dn * v_phi * r_sq * domega;
+      pdata->hdata[nflux * (g+1) + 12] += int_dn * (v1 * x1 + v2 * x2 + v3 * x3) * r_sq * domega;
+
+      // compute magnetic flux
+      // if (is_mhd) {
+      //   pdata->hdata[nflux * (g+1) + 9] += 0.5 * fabs(br) * r_sq * domega;
+      // }
+    }
+  }
+
+  // (1) user history
   Kokkos::parallel_reduce("HistSums",Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
   KOKKOS_LAMBDA(const int &idx, array_sum::GlobalSum &mb_sum) {
     auto scaf_ = scaf_temp;
@@ -757,10 +926,12 @@ void HstOutput(HistoryData *pdata, Mesh *pm) {
       hvars.the_array[11] = (y*pz - z*py)/den; // Lx
     }
 
+    hvars.the_array[12] = 0;
+
     // fill rest of the_array with zeros, if nhist < NREDUCTION_VARIABLES
-    for (int n=nhist_; n<NREDUCTION_VARIABLES; ++n) {
-      hvars.the_array[n] = 0.0;
-    }
+    // for (int n=nhist_; n<NREDUCTION_VARIABLES; ++n) {
+    //   hvars.the_array[n] = 0.0;
+    // }
 
     // sum into parallel reduce
     mb_sum += hvars;
